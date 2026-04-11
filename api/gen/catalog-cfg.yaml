@@ -1,0 +1,12 @@
+package: catalogapi
+
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+
+output-options:
+  include-tags:
+    - Catalog
+
+output: internal/catalog/api/catalog.gen.go

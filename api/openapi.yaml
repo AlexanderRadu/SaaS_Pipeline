@@ -55,7 +55,7 @@ paths:
   /api/v1/instances:
     get:
       summary: Список запущенных сервисов пользователя
-      tags: [Platform]
+      tags: [Status]
       description: Возвращает список всех инстансов, заказанных текущим пользователем (user_id берется из JWT токена).
       operationId: listUserInstances
       responses:
@@ -71,7 +71,7 @@ paths:
   /v1/catalog:
     get:
       summary: Получить каталог доступных шаблонов
-      tags: [Service Broker]
+      tags: [Catalog]
       operationId: getCatalog
       responses:
         '200':
@@ -84,7 +84,7 @@ paths:
   /v1/service_instances/{instance_id}:
     put:
       summary: Синхронное развертывание
-      tags: [Service Broker]
+      tags: [Deploy]
       description: Синхронно развертывает сервис. Соединение удерживается сервером до полного завершения запуска контейнера.
       operationId: provisionInstance
       parameters:
@@ -117,7 +117,7 @@ paths:
 
     delete:
       summary: Синхронное удаление сервиса
-      tags: [Service Broker]
+      tags: [Deploy]
       description: Синхронно останавливает и удаляет контейнер. Соединение удерживается до завершения удаления.
       operationId: deprovisionInstance
       parameters:

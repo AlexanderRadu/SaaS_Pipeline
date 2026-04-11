@@ -1,9 +1,12 @@
-package: api
+package: deployapi
+
 generate:
   models: true
   std-http-server: true
   strict-server: true
-output: api/deploy_api.gen.go
+
 output-options:
   include-tags:
-    - Service Broker
+    - Deploy
+
+output: internal/deploy/api/deploy.gen.go

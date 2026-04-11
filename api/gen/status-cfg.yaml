@@ -1,0 +1,12 @@
+package: statusapi
+
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+
+output-options:
+  include-tags:
+    - Status
+
+output: internal/status/api/status.gen.go

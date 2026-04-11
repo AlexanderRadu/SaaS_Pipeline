@@ -1,0 +1,12 @@
+package: authapi
+
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+
+output-options:
+  include-tags:
+    - Auth
+
+output: internal/auth/api/auth.gen.go
