@@ -1,0 +1,241 @@
+openapi: 3.0.3
+info:
+  title: SaaS-конвейер API (Синхронная версия)
+  version: 1.0.0
+servers:
+  - url: /
+    description: API Gateway
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/auth/register:
+    post:
+      summary: Регистрация нового пользователя
+      tags: [Auth]
+      security: []
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+      responses:
+        '201':
+          description: Пользователь создан
+        '400':
+          description: Ошибка валидации
+        '409':
+          description: Пользователь с таким email уже существует
+
+  /api/v1/auth/login:
+    post:
+      summary: Авторизация и получение токена
+      tags: [Auth]
+      security: []
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Неверный email или пароль
+
+  /api/v1/instances:
+    get:
+      summary: Список запущенных сервисов пользователя
+      tags: [Platform]
+      description: Возвращает список всех инстансов, заказанных текущим пользователем (user_id берется из JWT токена).
+      operationId: listUserInstances
+      responses:
+        '200':
+          description: Список инстансов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InstanceInfo'
+
+  /v1/catalog:
+    get:
+      summary: Получить каталог доступных шаблонов
+      tags: [Service Broker]
+      operationId: getCatalog
+      responses:
+        '200':
+          description: Успешный ответ с каталогом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
+
+  /v1/service_instances/{instance_id}:
+    put:
+      summary: Синхронное развертывание
+      tags: [Service Broker]
+      description: Синхронно развертывает сервис. Соединение удерживается сервером до полного завершения запуска контейнера.
+      operationId: provisionInstance
+      parameters:
+        - $ref: '#/components/parameters/InstanceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionRequest'
+      responses:
+        '201':
+          description: Сервис успешно развернут
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisionResponse'
+        '400':
+          description: Ошибка в запросе (например, неверный service_id)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Ошибка при развертывании
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Синхронное удаление сервиса
+      tags: [Service Broker]
+      description: Синхронно останавливает и удаляет контейнер. Соединение удерживается до завершения удаления.
+      operationId: deprovisionInstance
+      parameters:
+        - $ref: '#/components/parameters/InstanceId'
+      responses:
+        '204':
+          description: Сервис успешно остановлен и удален (без тела ответа)
+        '410':
+          description: Сервис уже удален или не существует
+        '500':
+          description: Ошибка при удалении
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    InstanceId:
+      name: instance_id
+      in: path
+      required: true
+      description: ID инстанса, генерируется клиентом при создании.
+      schema:
+        type: string
+
+  schemas:
+    AuthRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    TokenResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT Bearer токен
+
+    InstanceInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        service_name:
+          type: string
+          example: "Ubuntu"
+        status:
+          type: string
+          enum: [running, failed, deleted]
+          description: Статусы pending и deleting убраны, так как операции теперь синхронные
+        created_at:
+          type: string
+          format: date-time
+        connection_url:
+          type: string
+          nullable: true
+          example: "ssh://192.168.1.10:30022"
+
+    Catalog:
+      type: object
+      properties:
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+
+    Service:
+      type: object
+      required: [id, name, description]
+      properties:
+        id:
+          type: string
+          example: "uuid-ubuntu"
+        name:
+          type: string
+          example: "Ubuntu"
+        description:
+          type: string
+        docker_image:
+          type: string
+          description: Внутреннее поле
+          example: "ubuntu:latest"
+
+    ProvisionRequest:
+      type: object
+      required: [service_id]
+      properties:
+        service_id:
+          type: string
+          example: "uuid-ubuntu"
+
+    ProvisionResponse:
+      type: object
+      description: Успешный ответ с реквизитами для подключения (выдается сразу после блокирующего вызова)
+      properties:
+        connection_details:
+          type: object
+          properties:
+            url:
+              type: string
+            username:
+              type: string
+            password:
+              type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        description:
+          type: string
