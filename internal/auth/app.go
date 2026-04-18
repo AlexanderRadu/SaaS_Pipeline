@@ -2,10 +2,8 @@ package auth
 
 import (
 	api "SaaS_Pipeline/internal/auth/api"
-	"SaaS_Pipeline/internal/auth/migrations"
 	"SaaS_Pipeline/pkg/config"
 	"SaaS_Pipeline/pkg/logger"
-	"SaaS_Pipeline/pkg/migrator"
 	"SaaS_Pipeline/pkg/postgres"
 	"context"
 	"database/sql"
@@ -45,13 +43,6 @@ func New(ctx context.Context) (*App, error) {
 	}
 
 	sqlDB := stdlib.OpenDBFromPool(pool)
-	m, err := migrator.EmbedMigrations(sqlDB, migrations.FS, ".")
-	if err != nil {
-		return nil, fmt.Errorf("app.New: %w", err)
-	}
-	if err := m.Up(); err != nil {
-		return nil, fmt.Errorf("app.New: %w", err)
-	}
 
 	repo := NewRepository(sqlDB)
 	service := NewAuthService(*repo, []byte(jwtSecret))

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,19 +36,25 @@ func NewPool(ctx context.Context, dsn string, opts ...Options) (*pgxpool.Pool, e
 		applyOptions(cfg, opt)
 	}
 
-	connectCtx, cancel := context.WithTimeout(ctx, defaultConnectionTimeout)
-	defer cancel()
+	var pool *pgxpool.Pool
+	maxRetries := 5
 
-	pool, err := pgxpool.NewWithConfig(connectCtx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("postgres.NewPool: %w", err)
-	}
+	for i := 0; i < maxRetries; i++ {
+		connectCtx, cancel := context.WithTimeout(ctx, defaultConnectionTimeout)
 
-	if err := pool.Ping(connectCtx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("postgres.NewPool: %w", err)
+		pool, err = pgxpool.NewWithConfig(connectCtx, cfg)
+		if err == nil {
+			err = pool.Ping(connectCtx)
+		}
+		cancel()
+
+		if err == nil {
+			return pool, nil
+		}
+		log.Printf("Failed to connect to database (attempt %d/%d), retrying in 2 seconds: %v\n", i+1, maxRetries, err)
+		time.Sleep(2 * time.Second)
 	}
-	return pool, nil
+	return nil, fmt.Errorf("postgres.NewPool: exhausted retries: %w", err)
 }
 
 func defaultOptions() Options {
@@ -73,6 +80,6 @@ func applyOptions(cfg *pgxpool.Config, opts Options) {
 	}
 
 	if opts.ConnectionTimeout > 0 {
-		cfg.PingTimeout = opts.MaxConnLifetime
+		cfg.PingTimeout = opts.ConnectionTimeout
 	}
 }

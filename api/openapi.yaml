@@ -176,7 +176,6 @@ components:
         status:
           type: string
           enum: [running, failed, deleted]
-          description: Статусы pending и deleting убраны, так как операции теперь синхронные
         created_at:
           type: string
           format: date-time
@@ -220,7 +219,7 @@ components:
 
     ProvisionResponse:
       type: object
-      description: Успешный ответ с реквизитами для подключения (выдается сразу после блокирующего вызова)
+      description: Успешный ответ с реквизитами для подключения
       properties:
         connection_details:
           type: object

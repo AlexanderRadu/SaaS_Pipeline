@@ -5,9 +5,9 @@ go 1.26
 require (
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/lib/pq v1.12.3
 	github.com/oapi-codegen/runtime v1.4.0
 	github.com/pressly/goose/v3 v3.27.0
+	github.com/rabbitmq/amqp091-go v1.10.0
 	golang.org/x/crypto v0.50.0
 )
 

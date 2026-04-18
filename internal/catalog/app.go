@@ -1,0 +1,92 @@
+package catalog
+
+import (
+	api "SaaS_Pipeline/internal/catalog/api"
+	"SaaS_Pipeline/pkg/config"
+	"SaaS_Pipeline/pkg/logger"
+	"SaaS_Pipeline/pkg/postgres"
+	"context"
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+)
+
+type App struct {
+	log  *slog.Logger
+	pool *pgxpool.Pool
+	db   *sql.DB
+	srv  *http.Server
+}
+
+func New(ctx context.Context) (*App, error) {
+	if err := config.LoadDotEnv(".env"); err != nil {
+		return nil, fmt.Errorf("app.New: %w", err)
+	}
+	env := config.Get("CATALOG_APP_ENV", "local")
+	dsn := config.MustGet("DATABASE_URL")
+	port := config.Get("CATALOG_APP_PORT", "4040")
+
+	logger.Setup(env)
+	log := logger.With("service", "catalog")
+	log.Info("starting app catalog", "env", env)
+	pool, err := postgres.NewPool(ctx, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("app.New: %w", err)
+	}
+
+	sqlDB := stdlib.OpenDBFromPool(pool)
+
+	repo := NewRepository(sqlDB)
+	service := NewCatalogService(*repo)
+
+	strictHandler := api.NewStrictHandler(service, nil)
+
+	mux := http.NewServeMux()
+	api.HandlerFromMux(strictHandler, mux)
+	srv := &http.Server{
+		Addr:         ":" + port,
+		Handler:      mux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+	return &App{
+		log:  log,
+		pool: pool,
+		db:   sqlDB,
+		srv:  srv,
+	}, nil
+}
+
+func (a *App) Run(ctx context.Context) error {
+	errCh := make(chan error, 1)
+	go func() {
+		a.log.Info("HTTP server is running", slog.String("addr", a.srv.Addr))
+		if err := a.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case err := <-errCh:
+		return fmt.Errorf("server failed: %w", err)
+	case <-ctx.Done():
+		a.log.Info("shutting down gracefully...")
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := a.srv.Shutdown(shutdownCtx); err != nil {
+		a.log.Error("server forced to shutdown", slog.Any("error", err))
+	}
+	a.log.Info("closing database connections...")
+	if err := a.db.Close(); err != nil {
+		a.log.Error("failed to close sql.DB", slog.Any("error", err))
+	}
+	a.pool.Close()
+	a.log.Info("app stopped successfully")
+	return nil
+}
