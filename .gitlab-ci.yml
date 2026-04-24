@@ -11,6 +11,9 @@ variables:
 
 before_script:
   - go mod download
+  - go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
+  - mkdir -p internal/auth/api internal/deploy/api internal/status/api internal/catalog/api
+  - oapi-codegen -config api/gen/auth-cfg.yaml api/openapi.yaml && oapi-codegen -config api/gen/deploy-cfg.yaml api/openapi.yaml && oapi-codegen -config api/gen/status-cfg.yaml api/openapi.yaml && oapi-codegen -config api/gen/catalog-cfg.yaml api/openapi.yaml
 
 build:
   stage: build
