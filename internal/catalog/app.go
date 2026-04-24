@@ -14,13 +14,15 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/redis/go-redis/v9"
 )
 
 type App struct {
-	log  *slog.Logger
-	pool *pgxpool.Pool
-	db   *sql.DB
-	srv  *http.Server
+	log   *slog.Logger
+	pool  *pgxpool.Pool
+	db    *sql.DB
+	srv   *http.Server
+	redis *redis.Client
 }
 
 func New(ctx context.Context) (*App, error) {
@@ -30,6 +32,7 @@ func New(ctx context.Context) (*App, error) {
 	env := config.Get("CATALOG_APP_ENV", "local")
 	dsn := config.MustGet("DATABASE_URL")
 	port := config.Get("CATALOG_APP_PORT", "4040")
+	redisURL := config.MustGet("REDIS_URL")
 
 	logger.Setup(env)
 	log := logger.With("service", "catalog")
@@ -41,13 +44,24 @@ func New(ctx context.Context) (*App, error) {
 
 	sqlDB := stdlib.OpenDBFromPool(pool)
 
+	rdb := redis.NewClient(&redis.Options{
+		Addr: redisURL,
+	})
+
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		log.Warn("Could not connect to Redis. App will run in fallback mode (DB only)", "err", err)
+	}
+
 	repo := NewRepository(sqlDB)
-	service := NewCatalogService(*repo)
+	service := NewCatalogService(repo, log, rdb)
 
 	strictHandler := api.NewStrictHandler(service, nil)
 
 	mux := http.NewServeMux()
 	api.HandlerFromMux(strictHandler, mux)
+
+	mux.HandleFunc("GET /internal/catalog/{id}", service.InternalGetServiceById)
+
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      mux,
@@ -55,10 +69,11 @@ func New(ctx context.Context) (*App, error) {
 		WriteTimeout: 10 * time.Second,
 	}
 	return &App{
-		log:  log,
-		pool: pool,
-		db:   sqlDB,
-		srv:  srv,
+		log:   log,
+		pool:  pool,
+		db:    sqlDB,
+		srv:   srv,
+		redis: rdb,
 	}, nil
 }
 
@@ -82,6 +97,12 @@ func (a *App) Run(ctx context.Context) error {
 	if err := a.srv.Shutdown(shutdownCtx); err != nil {
 		a.log.Error("server forced to shutdown", slog.Any("error", err))
 	}
+
+	a.log.Info("closing redis connections...")
+	if err := a.redis.Close(); err != nil {
+		a.log.Error("failed to close redis", slog.Any("error", err))
+	}
+
 	a.log.Info("closing database connections...")
 	if err := a.db.Close(); err != nil {
 		a.log.Error("failed to close sql.DB", slog.Any("error", err))

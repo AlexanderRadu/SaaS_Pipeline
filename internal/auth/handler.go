@@ -13,13 +13,13 @@ import (
 )
 
 type AuthService struct {
-	repo      Repository
+	repo      *Repository
 	jwtSecret []byte
 	log       *slog.Logger
 }
 
-func NewAuthService(repo Repository, secret []byte) *AuthService {
-	return &AuthService{repo: repo, jwtSecret: secret}
+func NewAuthService(repo *Repository, secret []byte, log *slog.Logger) *AuthService {
+	return &AuthService{repo: repo, jwtSecret: secret, log: log}
 }
 
 func (s *AuthService) RegisterUser(ctx context.Context, request api.RegisterUserRequestObject) (api.RegisterUserResponseObject, error) {

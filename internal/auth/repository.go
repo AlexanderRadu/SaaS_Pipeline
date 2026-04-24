@@ -32,7 +32,7 @@ func (r *Repository) CreateUser(ctx context.Context, email string, passwordHash 
 }
 
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	query := `SELECT * FROM users WHERE email = $1`
+	query := `SELECT id, email, password_hash FROM users WHERE email = $1`
 	row := r.db.QueryRowContext(ctx, query, email)
 
 	var user User

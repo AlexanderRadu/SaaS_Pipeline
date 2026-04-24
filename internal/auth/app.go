@@ -45,7 +45,7 @@ func New(ctx context.Context) (*App, error) {
 	sqlDB := stdlib.OpenDBFromPool(pool)
 
 	repo := NewRepository(sqlDB)
-	service := NewAuthService(*repo, []byte(jwtSecret))
+	service := NewAuthService(repo, []byte(jwtSecret), log)
 
 	strictHandler := api.NewStrictHandler(service, nil)
 	mux := http.NewServeMux()

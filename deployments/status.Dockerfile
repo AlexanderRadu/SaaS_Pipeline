@@ -15,6 +15,6 @@ WORKDIR /root/
 
 COPY --from=builder /status-service .
 
-EXPOSE 5050
+EXPOSE 8083
 
 CMD ["./status-service"]

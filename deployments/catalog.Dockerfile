@@ -15,6 +15,6 @@ WORKDIR /root/
 
 COPY --from=builder /catalog-service .
 
-EXPOSE 4040
+EXPOSE 8084
 
 CMD ["./catalog-service"]

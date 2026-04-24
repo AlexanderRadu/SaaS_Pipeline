@@ -15,7 +15,7 @@ func NewRepository(db *sql.DB) *Repository {
 }
 
 func (r *Repository) GetInstancesByUserID(ctx context.Context, userID int64) ([]Instance, error) {
-	query := `SELECT id, user_id, service_name, status, connection_url, created_at FROM instances WHERE user_id = $1`
+	query := `SELECT id, user_id, service_name, status, connection_url FROM instances WHERE user_id = $1`
 	rows, err := r.db.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, err
@@ -25,7 +25,7 @@ func (r *Repository) GetInstancesByUserID(ctx context.Context, userID int64) ([]
 	var instances []Instance
 	for rows.Next() {
 		var inst Instance
-		if err := rows.Scan(&inst.ID, &inst.UserID, &inst.ServiceName, &inst.Status, &inst.ConnectionURL, &inst.CreatedAt); err != nil {
+		if err := rows.Scan(&inst.ID, &inst.UserID, &inst.ServiceName, &inst.Status, &inst.ConnectionURL); err != nil {
 			return nil, err
 		}
 		instances = append(instances, inst)
@@ -40,8 +40,22 @@ func (r *Repository) GetInstancesByUserID(ctx context.Context, userID int64) ([]
 	return instances, nil
 }
 
-func (r *Repository) UpdateInstanceStatus(instanceID string, status string, connectionURL string) error {
-	query := `UPDATE instances SET status = $1, connection_url = $2 WHERE id = $3`
-	_, err := r.db.Exec(query, status, connectionURL, instanceID)
+func (r *Repository) UpsertInstance(ctx context.Context, event InstanceUpdateMessage) error {
+	query := `
+        INSERT INTO instances (id, user_id, service_name, status, connection_url)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (id, user_id)     
+        DO UPDATE SET 
+            status = EXCLUDED.status,
+            connection_url = EXCLUDED.connection_url;`
+
+	_, err := r.db.ExecContext(ctx, query,
+		event.InstanceID,
+		event.UserID,
+		event.ServiceName,
+		event.Status,
+		event.ConnectionURL,
+	)
+
 	return err
 }

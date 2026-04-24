@@ -176,9 +176,6 @@ components:
         status:
           type: string
           enum: [running, failed, deleted]
-        created_at:
-          type: string
-          format: date-time
         connection_url:
           type: string
           nullable: true

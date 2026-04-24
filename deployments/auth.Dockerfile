@@ -15,6 +15,6 @@ WORKDIR /root/
 
 COPY --from=builder /auth-service .
 
-EXPOSE 8080
+EXPOSE 8081
 
 CMD ["./auth-service"]

@@ -4,7 +4,6 @@ import (
 	api "SaaS_Pipeline/internal/status/api"
 	"context"
 	"log/slog"
-	"time"
 )
 
 type StatusService struct {
@@ -36,13 +35,11 @@ func (s *StatusService) ListUserInstances(ctx context.Context, request api.ListU
 		url := inst.ConnectionURL
 		statusEnum := api.InstanceInfoStatus(inst.Status)
 
-		parsedTime, _ := time.Parse(time.RFC3339, inst.CreatedAt)
 		response = append(response, api.InstanceInfo{
 			Id:            &id,
 			ServiceName:   &name,
 			Status:        &statusEnum,
 			ConnectionUrl: url,
-			CreatedAt:     &parsedTime,
 		})
 	}
 	return response, nil

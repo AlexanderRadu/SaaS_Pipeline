@@ -9,9 +9,11 @@ import (
 )
 
 type InstanceUpdateMessage struct {
-	InstanceId    string `json:"instance_id"`
+	InstanceID    string `json:"instance_id"`
+	UserID        int64  `json:"user_id"`
+	ServiceName   string `json:"service_name,omitempty"`
 	Status        string `json:"status"`
-	ConnectionURL string `json:"connection_url"`
+	ConnectionURL string `json:"connection_url,omitempty"`
 }
 
 type Consumer struct {
@@ -64,24 +66,30 @@ func (c *Consumer) Start(ctx context.Context) error {
 			return nil
 
 		case d := <-msgs:
-			var msg InstanceUpdateMessage
-			if err := json.Unmarshal(d.Body, &msg); err != nil {
-				c.log.Error("failed to parse message", slog.Any("error", err))
-				d.Nack(false, false)
-				continue
-			}
-			err := c.repo.UpdateInstanceStatus(msg.InstanceId, msg.Status, msg.ConnectionURL)
-			if err != nil {
-				c.log.Error("failed to update status in DB", slog.Any("error", err))
+			if err := c.ProcessMessage(ctx, d.Body); err != nil {
 				d.Nack(false, false)
 				continue
 			}
 			d.Ack(false)
-			c.log.Info("instance status updated", slog.String("id", msg.InstanceId), slog.String("statis", msg.Status))
-
 		}
 
 	}
+
+}
+
+func (c *Consumer) ProcessMessage(ctx context.Context, body []byte) error {
+	var msg InstanceUpdateMessage
+	if err := json.Unmarshal(body, &msg); err != nil {
+		c.log.Error("failed to parse message", slog.Any("error", err))
+		return err
+	}
+	err := c.repo.UpsertInstance(ctx, msg)
+	if err != nil {
+		c.log.Error("failed to update status in DB", slog.Any("error", err))
+		return err
+	}
+	c.log.Info("instance status updated", slog.String("id", msg.InstanceID), slog.String("statis", msg.Status))
+	return nil
 
 }
 

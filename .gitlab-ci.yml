@@ -1,0 +1,62 @@
+image: golang:1.26
+
+stages:
+  - build
+  - test
+  - coverage
+
+variables:
+  GOFLAGS: "-mod=readonly"
+  CGO_ENABLED: "0"
+
+before_script:
+  - go mod download
+
+build:
+  stage: build
+  script:
+    - go build ./...
+
+test:
+  stage: test
+  script:
+    - go test ./... -v
+    - |
+      SERVICES=("auth" "catalog" "deploy" "status")
+      for svc in "${SERVICES[@]}"; do
+        go test "./internal/${svc}" -covermode=atomic -coverprofile="coverage-${svc}.out"
+      done
+  artifacts:
+    paths:
+      - coverage-*.out
+    expire_in: 1 day
+
+coverage:
+  stage: coverage
+  script:
+    - |
+      set -euo pipefail
+      THRESHOLD=30
+      SERVICES=("auth" "catalog" "deploy" "status")
+      FAILED=0
+
+      for svc in "${SERVICES[@]}"; do
+        profile="coverage-${svc}.out"
+
+        if [ ! -f "${profile}" ]; then
+          FAILED=1
+          continue
+        fi
+
+        total=$(go tool cover -func="${profile}" | awk '/^total:/{gsub("%","",$3); print $3}')
+        is_below=$(awk -v t="${total}" -v th="${THRESHOLD}" 'BEGIN { print (t < th ? 1 : 0) }')
+      
+        if [ "${is_below}" -eq 1 ]; then
+          echo "Coverage for ${svc} is below ${THRESHOLD}% (${total}%)"
+          FAILED=1
+        fi
+      done
+
+      if [ "${FAILED}" -ne 0 ]; then
+        exit 1
+      fi
