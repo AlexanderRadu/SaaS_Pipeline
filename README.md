@@ -1,3 +1,5 @@
+[![pipeline status](https://gitlab.crja72.ru/03-go-team/saas_pipeline/badges/main/pipeline.svg)](https://gitlab.crja72.ru/03-go-team/saas_pipeline/-/commits/main)
+
 # SaaS Pipeline
 
 A microservices-based SaaS platform built in Go.
