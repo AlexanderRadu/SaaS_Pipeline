@@ -3,6 +3,7 @@ package status
 import (
 	api "SaaS_Pipeline/internal/status/api"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -31,7 +32,7 @@ func TestStatusService_ListUserInstances_Success(t *testing.T) {
 		WithArgs(userID).
 		WillReturnRows(rows)
 
-	ctx := context.WithValue(context.Background(), "user_id", userID)
+	ctx := context.WithValue(context.Background(), UserIDKey, userID)
 	req := api.ListUserInstancesRequestObject{}
 
 	respObj, err := service.ListUserInstances(ctx, req)
@@ -64,7 +65,35 @@ func TestStatusService_ListUserInstances_NoContextUserID(t *testing.T) {
 
 	respObj, err := service.ListUserInstances(ctx, req)
 
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Equal(t, "unauthorized: missing or invalid user_id in context", err.Error())
+	assert.Nil(t, respObj)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestStatusService_ListUserInstances_RepoError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	repo := NewRepository(db)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	service := NewStatusService(repo, logger)
+
+	userID := int64(123)
+
+	mock.ExpectQuery(`SELECT id, user_id, service_name, status, connection_url FROM instances WHERE user_id = \$1`).
+		WithArgs(userID).
+		WillReturnError(errors.New("db connection lost"))
+
+	ctx := context.WithValue(context.Background(), UserIDKey, userID)
+	req := api.ListUserInstancesRequestObject{}
+
+	respObj, err := service.ListUserInstances(ctx, req)
+
+	assert.Error(t, err)
+	assert.Equal(t, "db connection lost", err.Error())
 	assert.Nil(t, respObj)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
