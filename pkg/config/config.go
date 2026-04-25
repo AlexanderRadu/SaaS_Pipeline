@@ -10,14 +10,14 @@ import (
 func MustGet(key string) string {
 	val := os.Getenv(key)
 	if val == "" {
-		panic(fmt.Sprintf("config.MustGet: %s reqiuired variable is not set", val))
+		panic(fmt.Sprintf("config.MustGet: %q required variable is not set", key))
 	}
 
 	return val
 }
 
 func Get(key, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
+	if val, exists := os.LookupEnv(key); exists {
 		return val
 	}
 
@@ -36,6 +36,7 @@ func LoadDotEnv(path string) error {
 
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
+
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -47,7 +48,10 @@ func LoadDotEnv(path string) error {
 
 		key = strings.TrimSpace(key)
 
-		if os.Getenv(key) == "" {
+		value = strings.TrimSpace(value)
+		value = strings.Trim(value, `"'`)
+
+		if _, exists := os.LookupEnv(key); !exists {
 			if err := os.Setenv(key, value); err != nil {
 				return fmt.Errorf("config.LoadDotEnv: %w", err)
 			}

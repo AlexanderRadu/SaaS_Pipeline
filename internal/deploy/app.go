@@ -3,9 +3,11 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/moby/moby/client"
@@ -74,7 +76,6 @@ func New(ctx context.Context) (*App, error) {
 	env := config.Get("DEPLOY_APP_ENV", "local")
 	port := config.Get("DEPLOY_APP_PORT", "3030")
 	amqpURL := config.MustGet("RABBITMQ_URL")
-
 	catalogURL := config.Get("CATALOG_SERVICE_URL", "http://catalog-service:8080")
 
 	logger.Setup(env)
@@ -93,22 +94,13 @@ func New(ctx context.Context) (*App, error) {
 	}
 
 	catalogClient := NewHTTPCatalogClient(catalogURL)
-
-	userIDMiddleware := func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			userIDStr := r.Header.Get("X-User-Id")
-			ctxWithValue := context.WithValue(r.Context(), UserIDKey, userIDStr)
-			next.ServeHTTP(w, r.WithContext(ctxWithValue))
-		})
-	}
-
 	deployService := NewDeployService(log, dockerClient, rmqPublisher, catalogClient)
 
 	strictHandler := api.NewStrictHandler(deployService, nil)
 	mux := http.NewServeMux()
 	api.HandlerFromMux(strictHandler, mux)
 
-	handlerWithMiddleware := userIDMiddleware(mux)
+	handlerWithMiddleware := authMiddleware(mux)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
@@ -123,19 +115,35 @@ func New(ctx context.Context) (*App, error) {
 	}, nil
 }
 
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userIDStr := r.Header.Get("X-User-Id")
+		if userIDStr == "" {
+			http.Error(w, "Unauthorized: missing X-User-Id header", http.StatusUnauthorized)
+			return
+		}
+
+		ctxWithValue := context.WithValue(r.Context(), UserIDKey, userIDStr)
+		next.ServeHTTP(w, r.WithContext(ctxWithValue))
+	})
+}
+
 func (a *App) Run(ctx context.Context) error {
+	var wg sync.WaitGroup
 	errCh := make(chan error, 1)
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		a.log.Info("HTTP server is running", slog.String("addr", a.srv.Addr))
-		if err := a.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errCh <- err
+		if err := a.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("server failed: %w", err)
 		}
 	}()
 
 	select {
 	case err := <-errCh:
-		return fmt.Errorf("server failed: %w", err)
+		return err
 	case <-ctx.Done():
 		a.log.Info("shutting down gracefully...")
 	}
@@ -146,6 +154,8 @@ func (a *App) Run(ctx context.Context) error {
 	if err := a.srv.Shutdown(shutdownCtx); err != nil {
 		a.log.Error("server forced to shutdown", slog.Any("error", err))
 	}
+
+	wg.Wait()
 
 	a.log.Info("closing RabbitMQ connection...")
 	if err := a.publisher.Close(); err != nil {
