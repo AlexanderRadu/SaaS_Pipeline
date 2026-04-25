@@ -1,33 +1,103 @@
 services:
-  db:
+  auth_db:
     image: postgres:17-alpine
-    container_name: postgres_db
+    container_name: auth_db
     env_file:
       - ../.env
+    environment:
+      POSTGRES_USER: ${AUTH_DB_USER}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
+      POSTGRES_DB: ${AUTH_DB_NAME}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - auth_db_data:/var/lib/postgresql/data
     networks:
       - network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  status_db:
+    image: postgres:17-alpine
+    container_name: status_db
+    env_file:
+      - ../.env
+    environment:
+      POSTGRES_USER: ${STATUS_DB_USER}
+      POSTGRES_PASSWORD: ${STATUS_DB_PASSWORD}
+      POSTGRES_DB: ${STATUS_DB_NAME}
+    volumes:
+      - status_db_data:/var/lib/postgresql/data
+    networks:
+      - network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  catalog_db:
+    image: postgres:17-alpine
+    container_name: catalog_db
+    env_file:
+      - ../.env
+    environment:
+      POSTGRES_USER: ${CATALOG_DB_USER}
+      POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD}
+      POSTGRES_DB: ${CATALOG_DB_NAME}
+    volumes:
+      - catalog_db_data:/var/lib/postgresql/data
+    networks:
+      - network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
       interval: 5s
       timeout: 5s
       retries: 10
 
 
-  migrate:
+  auth-migrate:
     build:
-        context: ../
-        dockerfile: deployments/migrate.Dockerfile
+      context: ../
+      dockerfile: deployments/migrate.Dockerfile
     env_file:
       - ../.env
+    environment:
+      DATABASE_URL: ${AUTH_DATABASE_URL}
     networks:
-        - network
+      - network
     depends_on:
-      db:
+      auth_db:
         condition: service_healthy
 
+  status-migrate:
+    build:
+      context: ../
+      dockerfile: deployments/migrate.Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: ${STATUS_DATABASE_URL}
+    networks:
+      - network
+    depends_on:
+      status_db:
+        condition: service_healthy
 
+  catalog-migrate:
+    build:
+      context: ../
+      dockerfile: deployments/migrate.Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: ${CATALOG_DATABASE_URL}
+    networks:
+      - network
+    depends_on:
+      catalog_db:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine
@@ -39,12 +109,10 @@ services:
     networks:
       - network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 10
-
-
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -60,7 +128,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
 
   nginx:
     image: nginx:alpine
@@ -82,12 +149,14 @@ services:
       dockerfile: deployments/auth.Dockerfile
     env_file:
       - ../.env
+    environment:
+      DATABASE_URL: ${AUTH_DATABASE_URL}
     networks:
       - network
     depends_on:
-      db:
+      auth_db:
         condition: service_healthy
-      migrate:
+      auth-migrate:
         condition: service_completed_successfully
 
   catalog-service:
@@ -97,12 +166,14 @@ services:
       dockerfile: deployments/catalog.Dockerfile
     env_file:
       - ../.env
+    environment:
+      DATABASE_URL: ${CATALOG_DATABASE_URL}
     networks:
       - network
     depends_on:
-      db:
+      catalog_db:
         condition: service_healthy
-      migrate:
+      catalog-migrate:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
@@ -114,14 +185,16 @@ services:
       dockerfile: deployments/status.Dockerfile
     env_file:
       - ../.env
+    environment:
+      DATABASE_URL: ${STATUS_DATABASE_URL}
     networks:
       - network
     depends_on:
-      db:
+      status_db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      migrate:
+      status-migrate:
         condition: service_completed_successfully
 
   deploy-service:
@@ -163,12 +236,13 @@ services:
       - status-service
       - deploy-service
 
-
 networks:
   network:
     driver: bridge
 
 volumes:
-  postgres_data:
+  auth_db_data:
+  status_db_data:
+  catalog_db_data:
   rabbitmq_data:
   redis_data:

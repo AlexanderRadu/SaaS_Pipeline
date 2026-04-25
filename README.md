@@ -45,7 +45,7 @@ The project is fully containerized and can be started using Docker Compose.
 2. Run the application:
 
 ```bash
-docker-compose -f deployments/docker-compose.yml up -d --build
+docker-compose docker compose --env-file .env -f deployments/docker-compose.yml up -d --build
 ```
 
 This will run all the necessary services, the databases, and message broker.
