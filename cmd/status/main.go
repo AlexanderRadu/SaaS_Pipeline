@@ -15,9 +15,9 @@ func main() {
 
 	app, err := status.New(ctx)
 	if err != nil {
-		log.Fatal("Failed to initialize app: %v", err)
+		log.Fatalf("Failed to initialize app: %v", err)
 	}
 	if err := app.Run(ctx); err != nil {
-		log.Fatal("Failed to run app: %v", err)
+		log.Fatalf("Failed to run app: %v", err)
 	}
 }
