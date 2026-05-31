@@ -34,8 +34,6 @@ func (t *ResilientTransport) RoundTrip(req *http.Request) (*http.Response, error
 	})
 
 	if err != nil {
-		// Если цепь разорвана (Circuit Breaker OPEN) или превышено число попыток,
-		// мы НЕ возвращаем ошибку proxy, а отдаем красивый Fallback ответ (Снижаем влияние на пользователя)
 		return t.fallbackResponse(req, err), nil
 	}
 
