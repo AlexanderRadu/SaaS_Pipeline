@@ -3,6 +3,7 @@ package api_gateway
 import (
 	"SaaS_Pipeline/pkg/config"
 	"SaaS_Pipeline/pkg/logger"
+	"SaaS_Pipeline/pkg/ratelimit"
 	"context"
 	"errors"
 	"log/slog"
@@ -10,6 +11,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 type App struct {
@@ -30,11 +33,30 @@ func New(ctx context.Context) (*App, error) {
 	log := logger.With("service", "api-gateway")
 	mux := http.NewServeMux()
 
-	mux.Handle("/api/v1/auth/", createProxy("AuthService", authServiceURL))
+	registerLimiter := ratelimit.RateLimit(rate.Limit(5.0/60.0), 5, ratelimit.IPKeyFn)
 
-	mux.Handle("/v1/catalog", AuthMiddleware(jwtSecret, createProxy("CatalogService", catalogServiceURL)))
-	mux.Handle("/v1/service_instances/", AuthMiddleware(jwtSecret, createProxy("DeployService", deployServiceURL)))
-	mux.Handle("/api/v1/instances", AuthMiddleware(jwtSecret, createProxy("StatusService", statusServiceURL)))
+	loginLimiter := ratelimit.RateLimit(rate.Limit(10.0/60.0), 5, ratelimit.IPKeyFn)
+
+	authProxy := createProxy("AuthService", authServiceURL)
+
+	mux.Handle("/api/v1/auth/register", registerLimiter(authProxy))
+	mux.Handle("/api/v1/auth/login", loginLimiter(authProxy))
+	mux.Handle("/api/v1/auth", authProxy)
+
+	authLimiter := ratelimit.RateLimit(rate.Limit(1000.0/60.0), 50, ratelimit.UserKeyFn)
+
+	secureRoute := func(next http.Handler) http.Handler {
+		return AuthMiddleware(jwtSecret, authLimiter(next))
+	}
+
+	catalogProxy := createProxy("CatalogService", catalogServiceURL)
+	mux.Handle("/v1/catalog", secureRoute(catalogProxy))
+
+	deployProxy := createProxy("DeployService", deployServiceURL)
+	mux.Handle("/v1/service_instances/", secureRoute(deployProxy))
+
+	statusProxy := createProxy("StatusService", statusServiceURL)
+	mux.Handle("/api/v1/instances", secureRoute(statusProxy))
 
 	srv := &http.Server{
 		Addr:         ":" + port,
