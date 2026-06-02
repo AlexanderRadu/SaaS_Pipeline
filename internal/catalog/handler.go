@@ -41,9 +41,9 @@ func (c *CatalogService) GetCatalog(ctx context.Context, request api.GetCatalogR
 				Services: &apiServices,
 			}, nil
 		}
-		c.log.Error("failed to unmarshal cache data", slog.Any("error", err))
+		c.log.ErrorContext(ctx, "failed to unmarshal cache data", slog.Any("error", err))
 	} else if !errors.Is(err, redis.Nil) {
-		c.log.Warn("redis connection error, falling back to DB", slog.Any("error", err))
+		c.log.WarnContext(ctx, "redis connection error, falling back to DB", slog.Any("error", err))
 	}
 
 	c.log.Info("catalog cache miss, fetching from database")
@@ -68,7 +68,7 @@ func (c *CatalogService) GetCatalog(ctx context.Context, request api.GetCatalogR
 		if err == nil {
 			err = c.redis.Set(bgCtx, catalogCacheKey, cacheBytes, catalogCacheTTL).Err()
 			if err != nil {
-				c.log.Warn("failed to set cache in redis", slog.Any("error", err))
+				c.log.WarnContext(ctx, "failed to set cache in redis", slog.Any("error", err))
 			} else {
 				c.log.Info("catalog successfully cached in redis")
 			}

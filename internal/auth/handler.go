@@ -4,7 +4,6 @@ import (
 	api "SaaS_Pipeline/internal/auth/api"
 	"context"
 	"errors"
-	"log"
 	"log/slog"
 	"time"
 
@@ -24,11 +23,11 @@ func NewAuthService(repo *Repository, secret []byte, log *slog.Logger) *AuthServ
 
 func (s *AuthService) RegisterUser(ctx context.Context, request api.RegisterUserRequestObject) (api.RegisterUserResponseObject, error) {
 	email := string(request.Body.Email)
-	password := string(request.Body.Password)
+	password := request.Body.Password
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Printf("Bcrypt error: %v", err)
+		s.log.ErrorContext(ctx, "Bcrypt error: %v", err)
 		return api.RegisterUser400Response{}, nil
 	}
 	err = s.repo.CreateUser(ctx, email, string(hash))
@@ -36,7 +35,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, request api.RegisterUser
 		if errors.Is(err, ErrUserExists) {
 			return api.RegisterUser409Response{}, nil
 		}
-		log.Printf("DB error: %v", err)
+		s.log.ErrorContext(ctx, "DB error: %v", err)
 		return nil, err
 	}
 	return api.RegisterUser201Response{}, nil
@@ -44,7 +43,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, request api.RegisterUser
 
 func (s *AuthService) LoginUser(ctx context.Context, request api.LoginUserRequestObject) (api.LoginUserResponseObject, error) {
 	email := string(request.Body.Email)
-	password := string(request.Body.Password)
+	password := request.Body.Password
 
 	user, err := s.repo.GetUserByEmail(ctx, email)
 
@@ -52,7 +51,7 @@ func (s *AuthService) LoginUser(ctx context.Context, request api.LoginUserReques
 		if errors.Is(err, ErrUserNotFound) {
 			return api.LoginUser401Response{}, nil
 		}
-		log.Printf("DB error: %v", err)
+		s.log.ErrorContext(ctx, "DB error: %v", err)
 		return nil, err
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
@@ -62,7 +61,7 @@ func (s *AuthService) LoginUser(ctx context.Context, request api.LoginUserReques
 
 	tokenString, err := s.generateJWT(user.ID, user.Email)
 	if err != nil {
-		log.Printf("JWT generation error: %v", err)
+		s.log.WarnContext(ctx, "JWT generation error: %v", err)
 		return nil, err
 	}
 

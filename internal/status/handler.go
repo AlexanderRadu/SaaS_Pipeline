@@ -23,13 +23,13 @@ func NewStatusService(repo *Repository, log *slog.Logger) *StatusService {
 func (s *StatusService) ListUserInstances(ctx context.Context, request api.ListUserInstancesRequestObject) (api.ListUserInstancesResponseObject, error) {
 	userID, ok := ctx.Value(UserIDKey).(int64)
 	if !ok {
-		s.log.Error("user_id not found in context or has invalid type")
+		s.log.ErrorContext(ctx, "user_id not found in context or has invalid type")
 		return nil, errors.New("unauthorized: missing or invalid user_id in context")
 	}
 
 	instances, err := s.repo.GetInstancesByUserID(ctx, userID)
 	if err != nil {
-		s.log.Error("failed to get user instances",
+		s.log.ErrorContext(ctx, "failed to get user instances",
 			slog.Any("error", err),
 			slog.Int64("user_id", userID),
 		)

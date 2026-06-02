@@ -80,15 +80,15 @@ func (c *Consumer) Start(ctx context.Context) error {
 func (c *Consumer) ProcessMessage(ctx context.Context, body []byte) error {
 	var msg InstanceUpdateMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
-		c.log.Error("failed to parse message", slog.Any("error", err))
+		c.log.ErrorContext(ctx, "failed to parse message", slog.Any("error", err))
 		return err
 	}
 	err := c.repo.UpsertInstance(ctx, msg)
 	if err != nil {
-		c.log.Error("failed to update status in DB", slog.Any("error", err))
+		c.log.ErrorContext(ctx, "failed to update status in DB", slog.Any("error", err))
 		return err
 	}
-	c.log.Info("instance status updated", slog.String("id", msg.InstanceID), slog.String("statis", msg.Status))
+	c.log.InfoContext(ctx, "instance status updated", slog.String("id", msg.InstanceID), slog.String("statis", msg.Status))
 	return nil
 
 }

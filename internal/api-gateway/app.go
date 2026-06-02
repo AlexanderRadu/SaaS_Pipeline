@@ -60,13 +60,12 @@ func New(ctx context.Context) (*App, error) {
 	statusProxy := createProxy("StatusService", statusServiceURL)
 	mux.Handle("/api/v1/instances", secureRoute(statusProxy))
 
-
 	var limit16kB int64 = 1024 * 16
-	limitedHandler := bodylimit.LimitBody(limit16kB)(mux)
+	handler := bodylimit.LimitBody(limit16kB)(RequestIDMiddleware(mux))
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           limitedHandler,
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

@@ -65,28 +65,28 @@ func NewDeployService(log *slog.Logger, dockerClient client.APIClient, rmq Event
 func (s *DeployService) ProvisionInstance(ctx context.Context, req api.ProvisionInstanceRequestObject) (api.ProvisionInstanceResponseObject, error) {
 	userID, err := extractUserID(ctx)
 	if err != nil {
-		s.log.Error("failed to extract user_id", slog.Any("error", err))
+		s.log.ErrorContext(ctx, "failed to extract user_id", slog.Any("error", err))
 		return api.ProvisionInstance500JSONResponse{Error: stringPtr(err.Error())}, nil
 	}
 
 	serviceName := req.Body.ServiceId
-	s.log.Info("starting provisioning", "instance_id", req.InstanceId, "service_id", serviceName)
+	s.log.InfoContext(ctx, "starting provisioning", "instance_id", req.InstanceId, "service_id", serviceName)
 
 	template, err := s.catalog.GetServiceInfo(ctx, serviceName)
 	if err != nil {
-		s.log.Error("error getting service info", slog.Any("error", err))
+		s.log.ErrorContext(ctx, "error getting service info", slog.Any("error", err))
 		return api.ProvisionInstance500JSONResponse{Error: stringPtr("Catalog unavailable")}, nil
 	}
 
 	password, err := generateRandomPassword(12)
 	if err != nil {
-		s.log.Error("failed to generate password", slog.Any("error", err))
+		s.log.ErrorContext(ctx, "failed to generate password", slog.Any("error", err))
 		return api.ProvisionInstance500JSONResponse{Error: stringPtr("Internal server error")}, nil
 	}
 
 	hostPort, err := s.deployDockerContainer(ctx, userID, req.InstanceId, template, password)
 	if err != nil {
-		s.log.Error("container deployment failed", slog.Any("error", err))
+		s.log.ErrorContext(ctx, "container deployment failed", slog.Any("error", err))
 		return api.ProvisionInstance500JSONResponse{Error: stringPtr("Deployment failed")}, nil
 	}
 
@@ -110,25 +110,25 @@ func (s *DeployService) ProvisionInstance(ctx context.Context, req api.Provision
 func (s *DeployService) DeprovisionInstance(ctx context.Context, req api.DeprovisionInstanceRequestObject) (api.DeprovisionInstanceResponseObject, error) {
 	userID, err := extractUserID(ctx)
 	if err != nil {
-		s.log.Error("failed to extract user_id in deprovision", slog.Any("error", err))
+		s.log.ErrorContext(ctx, "failed to extract user_id in deprovision", slog.Any("error", err))
 		return api.DeprovisionInstance500Response{}, nil
 	}
 
 	containerName := buildContainerName(userID, req.InstanceId)
-	s.log.Info("deprovisioning instance", "instance_id", req.InstanceId, "container", containerName)
+	s.log.InfoContext(ctx, "deprovisioning instance", "instance_id", req.InstanceId, "container", containerName)
 
 	_, err = s.docker.ContainerRemove(ctx, containerName, client.ContainerRemoveOptions{Force: true, RemoveVolumes: true})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
-			s.log.Warn("instance already deprovisioned", "instance_id", req.InstanceId)
+			s.log.WarnContext(ctx, "instance already deprovisioned", "instance_id", req.InstanceId)
 			return api.DeprovisionInstance410Response{}, nil
 		}
-		s.log.Error("failed to remove container", "error", err)
+		s.log.ErrorContext(ctx, "failed to remove container", "error", err)
 		return api.DeprovisionInstance500Response{}, nil
 	}
 
 	s.publishStatus(ctx, req.InstanceId, userID, "", "deleted", "")
-	s.log.Info("instance deprovisioned successfully", "instance_id", req.InstanceId)
+	s.log.InfoContext(ctx, "instance deprovisioned successfully", "instance_id", req.InstanceId)
 
 	return api.DeprovisionInstance204Response{}, nil
 }
@@ -142,7 +142,7 @@ func (s *DeployService) deployDockerContainer(ctx context.Context, userID int64,
 	s.log.Info("pulling image", "image", template.DockerImage)
 	pullResp, err := s.docker.ImagePull(ctx, template.DockerImage, client.ImagePullOptions{})
 	if err != nil {
-		s.log.Warn("failed to pull image (might use local)", slog.Any("error", err))
+		s.log.WarnContext(ctx, "failed to pull image (might use local)", slog.Any("error", err))
 	} else {
 		_, _ = io.Copy(io.Discard, pullResp)
 		pullResp.Close()
@@ -204,14 +204,14 @@ func (s *DeployService) publishStatus(ctx context.Context, instanceID string, us
 
 	eventBytes, err := json.Marshal(event)
 	if err != nil {
-		s.log.Error("failed to marshal status event", "error", err, "instance_id", instanceID)
+		s.log.ErrorContext(ctx, "failed to marshal status event", "error", err, "instance_id", instanceID)
 		return
 	}
 
 	if err := s.rmq.Publish(ctx, StatusQueueName, eventBytes); err != nil {
-		s.log.Error("failed to publish status to rabbitmq", "error", err, "instance_id", instanceID)
+		s.log.ErrorContext(ctx, "failed to publish status to rabbitmq", "error", err, "instance_id", instanceID)
 	} else {
-		s.log.Info("status update published", "instance_id", instanceID, "status", status)
+		s.log.InfoContext(ctx, "status update published", "instance_id", instanceID, "status", status)
 	}
 }
 
