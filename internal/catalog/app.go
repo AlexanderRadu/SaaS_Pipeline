@@ -34,6 +34,7 @@ func New(ctx context.Context) (*App, error) {
 	dsn := config.MustGet("DATABASE_URL")
 	port := config.Get("CATALOG_APP_PORT", "4040")
 	redisURL := config.MustGet("REDIS_URL")
+	internalAPIToken := config.MustGet("INTERNAL_API_TOKEN")
 
 	logger.Setup(env)
 	log := logger.With("service", "catalog")
@@ -61,7 +62,7 @@ func New(ctx context.Context) (*App, error) {
 	mux := http.NewServeMux()
 	api.HandlerFromMux(strictHandler, mux)
 
-	mux.HandleFunc("GET /internal/catalog/{id}", service.InternalGetServiceById)
+	mux.Handle("GET /internal/catalog/{id}", InternalAuthMiddleware(internalAPIToken)(http.HandlerFunc(service.InternalGetServiceById)))
 
 	srv := &http.Server{
 		Addr:              ":" + port,

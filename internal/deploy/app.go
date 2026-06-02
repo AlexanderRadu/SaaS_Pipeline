@@ -31,16 +31,18 @@ type App struct {
 }
 
 type httpCatalogClient struct {
-	baseURL string
-	client  *http.Client
+	baseURL  string
+	client   *http.Client
+	apiToken string
 }
 
-func NewHTTPCatalogClient(baseURL string) *httpCatalogClient {
+func NewHTTPCatalogClient(baseURL string, token string) *httpCatalogClient {
 	return &httpCatalogClient{
 		baseURL: baseURL,
 		client: &http.Client{
 			Timeout: 5 * time.Second,
 		},
+		apiToken: token,
 	}
 }
 
@@ -51,6 +53,8 @@ func (c *httpCatalogClient) GetServiceInfo(ctx context.Context, serviceID string
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+
+	req.Header.Set("Authorization", "Bearer "+c.apiToken)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -78,7 +82,7 @@ func New(ctx context.Context) (*App, error) {
 	port := config.Get("DEPLOY_APP_PORT", "3030")
 	amqpURL := config.MustGet("RABBITMQ_URL")
 	catalogURL := config.Get("CATALOG_SERVICE_URL", "http://catalog-service:8080")
-
+	internalAPIToken := config.MustGet("INTERNAL_API_TOKEN")
 	logger.Setup(env)
 	log := logger.With("service", "deploy")
 	log.Info("starting app deploy", "env", env)
@@ -94,7 +98,7 @@ func New(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("failed to initialize rabbitmq publisher: %w", err)
 	}
 
-	catalogClient := NewHTTPCatalogClient(catalogURL)
+	catalogClient := NewHTTPCatalogClient(catalogURL, internalAPIToken)
 	deployService := NewDeployService(log, dockerClient, rmqPublisher, catalogClient)
 
 	strictHandler := api.NewStrictHandler(deployService, nil)
