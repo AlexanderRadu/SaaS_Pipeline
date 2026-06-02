@@ -1,6 +1,7 @@
 package api_gateway
 
 import (
+	"SaaS_Pipeline/pkg/bodylimit"
 	"SaaS_Pipeline/pkg/config"
 	"SaaS_Pipeline/pkg/logger"
 	"SaaS_Pipeline/pkg/ratelimit"
@@ -59,9 +60,13 @@ func New(ctx context.Context) (*App, error) {
 	statusProxy := createProxy("StatusService", statusServiceURL)
 	mux.Handle("/api/v1/instances", secureRoute(statusProxy))
 
+
+	var limit16kB int64 = 1024 * 16
+	limitedHandler := bodylimit.LimitBody(limit16kB)(mux)
+
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           mux,
+		Handler:           limitedHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
