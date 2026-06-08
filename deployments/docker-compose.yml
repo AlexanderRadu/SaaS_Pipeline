@@ -64,7 +64,9 @@ services:
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: ${AUTH_DATABASE_URL}
+      AUTH_DB_USER: postgres
+      AUTH_DB_NAME: auth_db
+      DATABASE_URL: postgres://postgres:${AUTH_DB_PASSWORD}@auth_db:5432/auth_db?sslmode=disable
     networks:
       - network
     depends_on:
@@ -78,7 +80,8 @@ services:
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: ${STATUS_DATABASE_URL}
+      STATUS_DB_USER: postgres
+      DATABASE_URL: postgres://postgres:${STATUS_DB_PASSWORD}@status_db:5432/status_db?sslmode=disable
     networks:
       - network
     depends_on:
@@ -92,7 +95,9 @@ services:
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: ${CATALOG_DATABASE_URL}
+      CATALOG_DB_USER: postgres
+      CATALOG_DB_NAME: catalog_db
+      DATABASE_URL: postgres://postgres:${CATALOG_DB_PASSWORD}@catalog_db:5432/catalog_db?sslmode=disable
     networks:
       - network
     depends_on:

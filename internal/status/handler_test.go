@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"testing"
 
+	"SaaS_Pipeline/pkg/auth"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +34,7 @@ func TestStatusService_ListUserInstances_Success(t *testing.T) {
 		WithArgs(userID).
 		WillReturnRows(rows)
 
-	ctx := context.WithValue(context.Background(), UserIDKey, userID)
+	ctx := context.WithValue(context.Background(), auth.UserIDKey, userID)
 	req := api.ListUserInstancesRequestObject{}
 
 	respObj, err := service.ListUserInstances(ctx, req)
@@ -87,7 +89,7 @@ func TestStatusService_ListUserInstances_RepoError(t *testing.T) {
 		WithArgs(userID).
 		WillReturnError(errors.New("db connection lost"))
 
-	ctx := context.WithValue(context.Background(), UserIDKey, userID)
+	ctx := context.WithValue(context.Background(), auth.UserIDKey, userID)
 	req := api.ListUserInstancesRequestObject{}
 
 	respObj, err := service.ListUserInstances(ctx, req)

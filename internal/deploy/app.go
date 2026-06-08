@@ -11,17 +11,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/moby/moby/client"
-
 	api "SaaS_Pipeline/internal/deploy/api"
+	"SaaS_Pipeline/pkg/auth"
 	"SaaS_Pipeline/pkg/config"
 	"SaaS_Pipeline/pkg/logger"
 	"SaaS_Pipeline/pkg/rabbitmq"
+
+	"github.com/moby/moby/client"
 )
-
-type contextKey string
-
-const UserIDKey contextKey = "user_id"
 
 type App struct {
 	log       *slog.Logger
@@ -30,14 +27,14 @@ type App struct {
 	docker    *client.Client
 }
 
-type httpCatalogClient struct {
+type HttpCatalogClient struct {
 	baseURL  string
 	client   *http.Client
 	apiToken string
 }
 
-func NewHTTPCatalogClient(baseURL string, token string) *httpCatalogClient {
-	return &httpCatalogClient{
+func NewHTTPCatalogClient(baseURL string, token string) *HttpCatalogClient {
+	return &HttpCatalogClient{
 		baseURL: baseURL,
 		client: &http.Client{
 			Timeout: 5 * time.Second,
@@ -46,7 +43,7 @@ func NewHTTPCatalogClient(baseURL string, token string) *httpCatalogClient {
 	}
 }
 
-func (c *httpCatalogClient) GetServiceInfo(ctx context.Context, serviceID string) (*CatalogTemplate, error) {
+func (c *HttpCatalogClient) GetServiceInfo(ctx context.Context, serviceID string) (*CatalogTemplate, error) {
 	catalogURL := fmt.Sprintf("%s/internal/catalog/%s", c.baseURL, serviceID)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, catalogURL, nil)
@@ -95,7 +92,7 @@ func New(ctx context.Context) (*App, error) {
 	rmqPublisher, err := rabbitmq.NewPublisher(amqpURL)
 	if err != nil {
 		_ = dockerClient.Close()
-		return nil, fmt.Errorf("failed to initialize rabbitmq publisher: %w", err)
+		return nil, fmt.Errorf("failed to initialize RabbitMQ publisher: %w", err)
 	}
 
 	catalogClient := NewHTTPCatalogClient(catalogURL, internalAPIToken)
@@ -134,7 +131,7 @@ func authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctxWithValue := context.WithValue(r.Context(), UserIDKey, userIDStr)
+		ctxWithValue := context.WithValue(r.Context(), auth.UserIDKey, userIDStr)
 		next.ServeHTTP(w, r.WithContext(ctxWithValue))
 	})
 }

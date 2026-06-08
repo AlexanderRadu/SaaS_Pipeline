@@ -1,13 +1,13 @@
 package deploy
 
 import (
+	api "SaaS_Pipeline/internal/deploy/api"
+	"SaaS_Pipeline/pkg/auth"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
 	"testing"
-
-	api "SaaS_Pipeline/internal/deploy/api"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -64,7 +64,7 @@ func TestExtractUserID(t *testing.T) {
 	_, err := extractUserID(context.Background())
 	assert.Error(t, err)
 
-	ctxVal := context.WithValue(context.Background(), UserIDKey, "123")
+	ctxVal := context.WithValue(context.Background(), auth.UserIDKey, "123")
 	uid, err := extractUserID(ctxVal)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(123), uid)
@@ -100,7 +100,7 @@ func TestDeployService_ProvisionInstance_CatalogError(t *testing.T) {
 	catMock := &mockCatalogClient{err: errors.New("catalog down")}
 	service := NewDeployService(logger, nil, nil, catMock)
 
-	ctx := context.WithValue(context.Background(), UserIDKey, "123")
+	ctx := context.WithValue(context.Background(), auth.UserIDKey, "123")
 	req := api.ProvisionInstanceRequestObject{
 		InstanceId: "inst",
 		Body:       &api.ProvisionInstanceJSONRequestBody{ServiceId: "db"},
@@ -126,7 +126,7 @@ func TestDeployService_ProvisionInstance_DeployError_BadPort(t *testing.T) {
 	}
 	service := NewDeployService(logger, nil, nil, catMock)
 
-	ctx := context.WithValue(context.Background(), UserIDKey, "123")
+	ctx := context.WithValue(context.Background(), auth.UserIDKey, "123")
 	req := api.ProvisionInstanceRequestObject{
 		InstanceId: "1",
 		Body:       &api.ProvisionInstanceJSONRequestBody{ServiceId: "db"},

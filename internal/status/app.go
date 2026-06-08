@@ -13,18 +13,13 @@ import (
 	"time"
 
 	api "SaaS_Pipeline/internal/status/api"
+	"SaaS_Pipeline/pkg/auth"
 	"SaaS_Pipeline/pkg/config"
 	"SaaS_Pipeline/pkg/logger"
 	"SaaS_Pipeline/pkg/postgres"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-)
-
-type contextKey string
-
-const (
-	UserIDKey contextKey = "user_id"
 )
 
 type App struct {
@@ -61,7 +56,7 @@ func New(ctx context.Context) (*App, error) {
 
 	consumer, err := NewConsumer(amqpURL, repo, log)
 	if err != nil {
-		return nil, fmt.Errorf("app.New: failed to init rabbitmq: %w", err)
+		return nil, fmt.Errorf("app.New: failed to init RabbitMQ: %w", err)
 	}
 
 	strictHandler := api.NewStrictHandler(service, nil)
@@ -104,7 +99,7 @@ func authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctxWithValue := context.WithValue(r.Context(), UserIDKey, userID)
+		ctxWithValue := context.WithValue(r.Context(), auth.UserIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctxWithValue))
 	})
 }

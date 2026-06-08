@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"SaaS_Pipeline/pkg/auth"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -216,7 +217,7 @@ func (s *DeployService) publishStatus(ctx context.Context, instanceID string, us
 }
 
 func extractUserID(ctx context.Context) (int64, error) {
-	userIDStr, ok := ctx.Value(UserIDKey).(string)
+	userIDStr, ok := ctx.Value(auth.UserIDKey).(string)
 	if !ok || userIDStr == "" {
 		return 0, errors.New("unauthorized or missing X-User-Id header")
 	}
