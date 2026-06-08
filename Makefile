@@ -1,4 +1,5 @@
-.PHONY: secrets
+.PHONY: secrets, generate-api
+
 
 secrets:
 	@cp .env.example .env
@@ -21,3 +22,8 @@ secrets:
     rm -f .env.bak
 
 
+generate-api:
+	oapi-codegen -config api/gen/auth-cfg.yml api/openapi.yml
+	oapi-codegen -config api/gen/catalog-cfg.yml api/openapi.yml
+	oapi-codegen -config api/gen/deploy-cfg.yml api/openapi.yml
+	oapi-codegen -config api/gen/status-cfg.yml api/openapi.yml
