@@ -23,7 +23,7 @@ secrets:
 
 
 generate-api:
-	oapi-codegen -config api/gen/auth-cfg.yml api/openapi.yml
-	oapi-codegen -config api/gen/catalog-cfg.yml api/openapi.yml
-	oapi-codegen -config api/gen/deploy-cfg.yml api/openapi.yml
-	oapi-codegen -config api/gen/status-cfg.yml api/openapi.yml
+	oapi-codegen -config api/gen/auth-cfg.yaml api/openapi.yaml
+	oapi-codegen -config api/gen/catalog-cfg.yaml api/openapi.yaml
+	oapi-codegen -config api/gen/deploy-cfg.yaml api/openapi.yaml
+	oapi-codegen -config api/gen/status-cfg.yaml api/openapi.yaml

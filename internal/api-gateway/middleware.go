@@ -10,17 +10,24 @@ import (
 	"github.com/google/uuid"
 )
 
+func jsonError(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	w.Write([]byte(message))
+
+}
 func AuthMiddleware(jwtSecret string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Del("X-User-Id")
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			http.Error(w, `{"error": "missing authorization header"}`, http.StatusUnauthorized)
+			jsonError(w, `{"error": "missing authorization header"}`, http.StatusUnauthorized)
 			return
 		}
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, `{"error": "invalid authorization format"}`, http.StatusUnauthorized)
+			jsonError(w, `{"error": "invalid authorization format"}`, http.StatusUnauthorized)
 			return
 		}
 		tokenString := parts[1]
@@ -33,19 +40,19 @@ func AuthMiddleware(jwtSecret string, next http.Handler) http.Handler {
 		})
 
 		if err != nil || !token.Valid {
-			http.Error(w, `{"error": "invalid or expired token"}`, http.StatusUnauthorized)
+			jsonError(w, `{"error": "invalid or expired token"}`, http.StatusUnauthorized)
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			http.Error(w, `{"error": "invalid token claims"}`, http.StatusUnauthorized)
+			jsonError(w, `{"error": "invalid token claims"}`, http.StatusUnauthorized)
 			return
 		}
 
 		userIDFloat, ok := claims["user_id"].(float64)
 		if !ok {
-			http.Error(w, `{"error": "user_id not found in token"}`, http.StatusUnauthorized)
+			jsonError(w, `{"error": "user_id not found in token"}`, http.StatusUnauthorized)
 			return
 		}
 

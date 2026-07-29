@@ -1,4 +1,4 @@
-package api_gateway
+package resilience
 
 import (
 	"bytes"
@@ -45,6 +45,17 @@ func (t *ResilientTransport) doWithRetry(req *http.Request) (*http.Response, err
 	var err error
 
 	for attempt := 0; attempt <= t.MaxRetries; attempt++ {
+
+		if attempt > 0 {
+			if req.Body != nil {
+				if req.GetBody != nil {
+					req.Body, _ = req.GetBody()
+				} else {
+					break
+				}
+			}
+		}
+
 		resp, err = t.Next.RoundTrip(req)
 
 		if err == nil && resp.StatusCode < 500 {
@@ -61,6 +72,11 @@ func (t *ResilientTransport) doWithRetry(req *http.Request) (*http.Response, err
 	if err != nil {
 		return nil, err
 	}
+
+	if resp != nil {
+		return resp, nil
+	}
+
 	return nil, errors.New("service returned 50x errors repeatedly")
 }
 

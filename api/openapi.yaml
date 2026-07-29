@@ -1,18 +1,18 @@
 openapi: 3.0.3
 info:
-  title: SaaS-конвейер API (Асинхронная версия)
+  title: PILOT - Pipeline Orchestration Tool (OSB API Compliant)
   version: 1.0.0
 servers:
   - url: /
-    description: API Gateway
+    description: Asynchronous API for managing services
 
 security:
   - BearerAuth: [ ]
 
 paths:
-  /api/v1/auth/register:
+  /api/v2/auth/register:
     post:
-      summary: Регистрация нового пользователя
+      description: New user registration
       tags: [ Auth ]
       security: [ ]
       operationId: registerUser
@@ -24,15 +24,15 @@ paths:
               $ref: '#/components/schemas/AuthRequest'
       responses:
         '201':
-          description: Пользователь создан
+          description: User created
         '400':
-          description: Ошибка валидации
+          description: Bad request
         '409':
-          description: Пользователь с таким email уже существует
+          description: Conflict
 
-  /api/v1/auth/login:
+  /api/v2/auth/login:
     post:
-      summary: Авторизация и получение токена
+      description: Authorization and token retrieval
       tags: [ Auth ]
       security: [ ]
       operationId: loginUser
@@ -44,52 +44,87 @@ paths:
               $ref: '#/components/schemas/AuthRequest'
       responses:
         '200':
-          description: Успешный вход
+          description: OK
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TokenResponse'
         '401':
-          description: Неверный email или пароль
+          description: Unauthorized
 
-  /api/v1/instances:
+  /api/v2/catalog:
     get:
-      summary: Список запущенных сервисов пользователя
-      tags: [ Status ]
-      description: Возвращает список всех инстансов текущего пользователя.
-      operationId: listUserInstances
-      responses:
-        '200':
-          description: Список инстансов
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/InstanceInfo'
-
-  /v1/catalog:
-    get:
-      summary: Получить каталог доступных шаблонов
+      description: Catalog of available services
       tags: [ Catalog ]
       operationId: getCatalog
+      parameters:
+        - $ref: '#/components/parameters/APIVersion'
       responses:
         '200':
-          description: Успешный ответ с каталогом
+          description: OK
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '401':
+          description: Unauthorized
 
+  /api/v2/instances:
+    get:
+      description: List of currently working user's instances
+      tags: [ Status ]
+      operationId: listUserInstances
+      parameters:
+        - $ref: '#/components/parameters/APIVersion'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instances:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InstanceInfo'
+        '401':
+          description: Unauthorized
 
-  /v1/service_instances/{instance_id}:
+  /api/v2/service_instances/{instance_id}:
+    get:
+      description: Info about a specific service instance
+      tags: [ Status ]
+      operationId: getInstanceInfo
+      parameters:
+        - $ref: '#/components/parameters/APIVersion'
+        - $ref: '#/components/parameters/InstanceId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstanceInfo'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+
     put:
-      summary: Асинхронное развертывание
+      description: Provision a new service instance
       tags: [ Deploy ]
-      description: Инициирует запуск контейнера и возвращает operation_id для отслеживания статуса.
       operationId: provisionInstance
       parameters:
+        - $ref: '#/components/parameters/APIVersion'
         - $ref: '#/components/parameters/InstanceId'
+        - $ref: '#/components/parameters/AcceptsIncomplete'
       requestBody:
         required: true
         content:
@@ -97,59 +132,223 @@ paths:
             schema:
               $ref: '#/components/schemas/ProvisionRequest'
       responses:
+        '200':
+          description: OK (Already exists with identical parameters)
+        '201':
+          description: Created synchronously
         '202':
-          description: Запрос принят в обработку
+          description: Accepted (Asynchronous execution started)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OperationResponse'
         '400':
-          description: Ошибка в запросе
+          description: Bad request (async required)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
 
-    delete:
-      summary: Асинхронное удаление сервиса
+    patch:
+      description: Update a service instance
       tags: [ Deploy ]
-      description: Инициирует остановку и удаление контейнера. Возвращает operation_id.
-      operationId: deprovisionInstance
+      operationId: updateInstance
       parameters:
+        - $ref: '#/components/parameters/APIVersion'
         - $ref: '#/components/parameters/InstanceId'
+        - $ref: '#/components/parameters/AcceptsIncomplete'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionRequest'
       responses:
+        '200':
+          description: Synchronously updated
         '202':
-          description: Запрос на удаление принят в обработку
+          description: Accepted (Asynchronous execution started)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OperationResponse'
-        '410':
-          description: Сервис уже удален или не существует
+        '422':
+          description: Unprocessable Entity (Update not supported)
 
-
-  /api/v1/operations/{operation_id}:
-    get:
-      summary: Получить статус асинхронной операции
-      tags: [ Operations ]
-      description: Клиент должен опрашивать этот метод (например, раз в 5 секунд), пока статус не станет succeeded или failed.
-      operationId: getOperationStatus
+    delete:
+      description: Deprovision a service instance
+      tags: [ Deploy ]
+      operationId: deprovisionInstance
       parameters:
-        - name: operation_id
-          in: path
+        - $ref: '#/components/parameters/APIVersion'
+        - $ref: '#/components/parameters/InstanceId'
+        - $ref: '#/components/parameters/AcceptsIncomplete'
+        - name: service_id
+          in: query
           required: true
-          description: ID операции, полученный при PUT/DELETE запросе
+          schema:
+            type: string
+        - name: plan_id
+          in: query
+          required: true
           schema:
             type: string
       responses:
         '200':
-          description: Текущий статус операции
+          description: Synchronously deleted
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: Bad request (async required)
+        '401':
+          description: Unauthorized
+        '410':
+          description: Gone
+
+  /api/v2/service_instances/{instance_id}/last_operation:
+    get:
+      description: Get last asynchronous operation status for instance
+      tags: [ Status ]
+      operationId: listLastAsyncOperationStatus
+      parameters:
+        - $ref: '#/components/parameters/APIVersion'
+        - $ref: '#/components/parameters/InstanceId'
+        - name: service_id
+          in: query
+          description: ID of the service
+          schema:
+            type: string
+        - name: plan_id
+          in: query
+          description: ID of the plan
+          schema:
+            type: string
+        - name: operation
+          in: query
+          description: The operation ID returned by the broker during provision/deprovision
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OperationStatus'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+
+  /api/v2/service_instances/{instance_id}/service_bindings/{binding_id}:
+    put:
+      description: Create a service binding
+      tags: [ Bindings ]
+      operationId: createServiceBinding
+      parameters:
+        - $ref: '#/components/parameters/APIVersion'
+        - $ref: '#/components/parameters/InstanceId'
+        - $ref: '#/components/parameters/BindingId'
+        - $ref: '#/components/parameters/AcceptsIncomplete'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceBindingRequest'
+      responses:
+        '201':
+          description: Created (Synchronous)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceBindingResponse'
+        '202':
+          description: Accepted (Asynchronous)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: Bad request (async required)
+        '401':
+          description: Unauthorized
+
+    delete:
+      description: Delete a service binding
+      tags: [ Bindings ]
+      operationId: deleteServiceBinding
+      parameters:
+        - $ref: '#/components/parameters/APIVersion'
+        - $ref: '#/components/parameters/InstanceId'
+        - $ref: '#/components/parameters/BindingId'
+        - $ref: '#/components/parameters/AcceptsIncomplete'
+        - name: service_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: plan_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK (Synchronous)
+        '202':
+          description: Accepted (Asynchronous)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: Bad request (async required)
+        '401':
+          description: Unauthorized
+        '410':
+          description: Gone
+
+  /api/v2/service_instances/{instance_id}/service_bindings/{binding_id}/last_operation:
+    get:
+      description: Get last asynchronous operation status for a binding
+      tags: [ Bindings ]
+      operationId: getBindingLastOperationStatus
+      parameters:
+        - $ref: '#/components/parameters/APIVersion'
+        - $ref: '#/components/parameters/InstanceId'
+        - $ref: '#/components/parameters/BindingId'
+        - name: service_id
+          in: query
+          schema:
+            type: string
+        - name: plan_id
+          in: query
+          schema:
+            type: string
+        - name: operation
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationStatus'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
         '404':
-          description: Операция не найдена
+          description: Not found
 
 components:
   securitySchemes:
@@ -159,13 +358,35 @@ components:
       bearerFormat: JWT
 
   parameters:
+    APIVersion:
+      name: X-Broker-API-Version
+      in: header
+      description: Version number of the Service Broker API that the Platform will use
+      required: true
+      schema:
+        type: string
+        default: '2.16'
     InstanceId:
       name: instance_id
       in: path
       required: true
-      description: ID инстанса, генерируется клиентом при создании.
+      description: UUID of the service instance
       schema:
         type: string
+    BindingId:
+      name: binding_id
+      in: path
+      required: true
+      description: UUID of the binding
+      schema:
+        type: string
+    AcceptsIncomplete:
+      name: accepts_incomplete
+      in: query
+      required: false
+      description: Flag to allow asynchronous processing
+      schema:
+        type: boolean
 
   schemas:
     AuthRequest:
@@ -184,26 +405,26 @@ components:
       properties:
         token:
           type: string
-          description: JWT Bearer токен
 
     InstanceInfo:
       type: object
       properties:
         id:
           type: string
-        service_name:
+        service_id:
           type: string
-          example: "Ubuntu"
+        plan_id:
+          type: string
         status:
           type: string
           enum: [ provisioning, running, deprovisioning, failed, deleted ]
         connection_url:
           type: string
           nullable: true
-          example: "ssh://192.168.1.10:30022"
 
     Catalog:
       type: object
+      required: [ services ]
       properties:
         services:
           type: array
@@ -212,71 +433,94 @@ components:
 
     Service:
       type: object
+      required: [ id, name, description, bindable, plans ]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        bindable:
+          type: boolean
+          description: Specifies whether service bindings can be created.
+        plans:
+          type: array
+          items:
+            $ref: '#/components/schemas/Plan'
+
+    Plan:
+      type: object
       required: [ id, name, description ]
       properties:
         id:
           type: string
-          example: "uuid-ubuntu"
         name:
           type: string
-          example: "Ubuntu"
         description:
           type: string
-        docker_image:
-          type: string
-          description: Внутреннее поле
-          example: "ubuntu:latest"
 
     ProvisionRequest:
       type: object
-      required: [ service_id ]
+      required: [ service_id, plan_id ]
       properties:
         service_id:
           type: string
-          example: "uuid-ubuntu"
+        plan_id:
+          type: string
+        context:
+          type: object
+          description: Platform-specific contextual information under which the service instance is to be provisioned.
+        organization_guid:
+          type: string
+        space_guid:
+          type: string
+        parameters:
+          type: object
 
+    ServiceBindingRequest:
+      type: object
+      required: [ service_id, plan_id ]
+      properties:
+        service_id:
+          type: string
+        plan_id:
+          type: string
+        bind_resource:
+          type: object
+          description: The resource to be bound to the service instance.
+        parameters:
+          type: object
+          nullable: true
+
+    ServiceBindingResponse:
+      type: object
+      properties:
+        credentials:
+          type: object
+          additionalProperties: true
 
     OperationResponse:
       type: object
-      description: Краткий ответ при инициации задачи
       properties:
-        operation_id:
+        description:
           type: string
-          example: "op-12345-abcde"
-        status:
+        operation:
           type: string
-          enum: [ in_progress ]
-          example: "in_progress"
+          description: The operation ID for tracking progress via /last_operation
+          example: "op-12345"
 
     OperationStatus:
       type: object
-      description: Полный статус задачи (возвращается при опросе)
+      required: [ state ]
       properties:
-        operation_id:
+        state:
           type: string
-          example: "op-12345-abcde"
-        status:
-          type: string
-          enum: [ in_progress, succeeded, failed ]
+          enum: [ in progress, succeeded, failed ]
           example: "succeeded"
-        result:
-          type: object
-          nullable: true
-          description: Результат выполнения (например, доступы). Присутствует только при status=succeeded.
-          properties:
-            connection_details:
-              type: object
-              properties:
-                url:
-                  type: string
-                username:
-                  type: string
-                password:
-                  type: string
-        error:
+        description:
           type: string
           nullable: true
-          example: "Timeout pulling docker image"
 
     Error:
       type: object

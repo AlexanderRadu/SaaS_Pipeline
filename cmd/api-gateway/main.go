@@ -19,7 +19,7 @@ func main() {
 		log.Fatalf("Failed to initialize gateway: %v", err)
 	}
 
-	if err := app.Run(ctx); err != nil {
+	if err = app.Run(ctx); err != nil {
 		log.Fatalf("Gateway stopped with error: %v", err)
 	}
 }

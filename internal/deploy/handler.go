@@ -14,6 +14,7 @@ import (
 	api "SaaS_Pipeline/internal/deploy/api"
 
 	"github.com/containerd/errdefs"
+	"github.com/google/uuid"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
@@ -24,6 +25,22 @@ const (
 	LocalhostIP     = "127.0.0.1"
 )
 
+type TaskType string
+
+const (
+	TaskProvision   TaskType = "provision"
+	TaskDeprovision TaskType = "deprovision"
+	DeployTaskQueue          = "deploy_tasks"
+)
+
+type DeployTaskEvent struct {
+	OperationID string   `json:"operation_id"`
+	UserID      string   `json:"user_id"`
+	TaskType    TaskType `json:"task_type"`
+	InstanceID  string   `json:"instance_id"`
+	ServiceID   string   `json:"service_id,omitempty"`
+}
+
 type CatalogClient interface {
 	GetServiceInfo(ctx context.Context, serviceID string) (*CatalogTemplate, error)
 }
@@ -33,18 +50,18 @@ type EventPublisher interface {
 }
 
 type DeployService struct {
-	log     *slog.Logger
-	docker  client.APIClient
-	rmq     EventPublisher
-	catalog CatalogClient
+	log *slog.Logger
+	rmq EventPublisher
 }
 
 type InstanceStatusEvent struct {
+	OperationID   string `json:"operation_id"`
 	InstanceID    string `json:"instance_id"`
 	UserID        int64  `json:"user_id"`
 	ServiceName   string `json:"service_name,omitempty"`
 	Status        string `json:"status"`
 	ConnectionURL string `json:"connection_url,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
 
 type CatalogTemplate struct {
@@ -54,12 +71,10 @@ type CatalogTemplate struct {
 	DefaultUser string `json:"default_user"`
 }
 
-func NewDeployService(log *slog.Logger, dockerClient client.APIClient, rmq EventPublisher, catalog CatalogClient) *DeployService {
+func NewDeployService(log *slog.Logger, rmq EventPublisher) *DeployService {
 	return &DeployService{
-		log:     log,
-		docker:  dockerClient,
-		rmq:     rmq,
-		catalog: catalog,
+		log: log,
+		rmq: rmq,
 	}
 }
 
@@ -67,45 +82,30 @@ func (s *DeployService) ProvisionInstance(ctx context.Context, req api.Provision
 	userID, err := extractUserID(ctx)
 	if err != nil {
 		s.log.ErrorContext(ctx, "failed to extract user_id", slog.Any("error", err))
-		return api.ProvisionInstance500JSONResponse{Error: stringPtr(err.Error())}, nil
+		return api.ProvisionInstance400JSONResponse{Error: stringPtr(err.Error())}, nil
+	}
+	serviceID := req.Body.ServiceId
+	instanceID := req.InstanceId
+
+	operationID := uuid.New()
+
+	s.log.InfoContext(ctx, "received provision request, queuing task", "instance_id", instanceID, "operation_id", operationID)
+
+	s.publishStatus(ctx, instanceID, userID, serviceID, "provisioning", "")
+
+	task := DeployTaskEvent{
+		OperationID: operationID,
+		UserID:      userID,
+		ServiceID:   serviceID,
+		InstanceID:  instanceID,
+		TaskType:    TaskProvision,
 	}
 
-	serviceName := req.Body.ServiceId
-	s.log.InfoContext(ctx, "starting provisioning", "instance_id", req.InstanceId, "service_id", serviceName)
-
-	template, err := s.catalog.GetServiceInfo(ctx, serviceName)
+	taskBytes, err := json.Marshal(task)
 	if err != nil {
-		s.log.ErrorContext(ctx, "error getting service info", slog.Any("error", err))
-		return api.ProvisionInstance500JSONResponse{Error: stringPtr("Catalog unavailable")}, nil
+		s.log.ErrorContext(ctx, "failed to marshal task to json", slog.Any("error", err))
+		return api.ProvisionInstance500JSONResponse{Error: stringPtr("internal error")}, nil
 	}
-
-	password, err := generateRandomPassword(12)
-	if err != nil {
-		s.log.ErrorContext(ctx, "failed to generate password", slog.Any("error", err))
-		return api.ProvisionInstance500JSONResponse{Error: stringPtr("Internal server error")}, nil
-	}
-
-	hostPort, err := s.deployDockerContainer(ctx, userID, req.InstanceId, template, password)
-	if err != nil {
-		s.log.ErrorContext(ctx, "container deployment failed", slog.Any("error", err))
-		return api.ProvisionInstance500JSONResponse{Error: stringPtr("Deployment failed")}, nil
-	}
-
-	connectionURL := buildConnectionURL(template.Scheme, template.DefaultUser, password, LocalhostIP, hostPort)
-
-	s.publishStatus(ctx, req.InstanceId, userID, serviceName, "running", connectionURL)
-
-	return api.ProvisionInstance201JSONResponse{
-		ConnectionDetails: &struct {
-			Password *string `json:"password,omitempty"`
-			Url      *string `json:"url,omitempty"`
-			Username *string `json:"username,omitempty"`
-		}{
-			Url:      stringPtr(connectionURL),
-			Username: stringPtr(template.DefaultUser),
-			Password: stringPtr(password),
-		},
-	}, nil
 }
 
 func (s *DeployService) DeprovisionInstance(ctx context.Context, req api.DeprovisionInstanceRequestObject) (api.DeprovisionInstanceResponseObject, error) {

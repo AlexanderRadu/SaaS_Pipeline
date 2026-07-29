@@ -1,19 +1,40 @@
 package ratelimit
 
 import (
-	"net"
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	"golang.org/x/time/rate"
 )
 
-func RateLimit(limit rate.Limit, burst int, keyFn func(*http.Request) string) func(http.Handler) http.Handler {
+type client struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+func RateLimit(limit rate.Limit, burst int, ttl time.Duration, cleanupInterval time.Duration, keyFn func(*http.Request) string) func(http.Handler) http.Handler {
 	var (
 		mu       sync.Mutex
-		limiters = make(map[string]*rate.Limiter)
+		limiters = make(map[string]*client)
 	)
+
+	go func() {
+		ticker := time.NewTicker(cleanupInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			mu.Lock()
+			for key, c := range limiters {
+				if time.Since(c.lastSeen) > ttl {
+					delete(limiters, key)
+				}
+			}
+			mu.Unlock()
+		}
+
+	}()
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			key := keyFn(r)
@@ -22,14 +43,15 @@ func RateLimit(limit rate.Limit, burst int, keyFn func(*http.Request) string) fu
 				return
 			}
 			mu.Lock()
-			limiter, exists := limiters[key]
+			c, exists := limiters[key]
 			if !exists {
-				limiter = rate.NewLimiter(limit, burst)
-				limiters[key] = limiter
+				c = &client{limiter: rate.NewLimiter(limit, burst)}
+				limiters[key] = c
 			}
+			c.lastSeen = time.Now()
 			mu.Unlock()
 
-			res := limiter.Reserve()
+			res := c.limiter.Reserve()
 			if !res.OK() {
 				http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
 				return
@@ -53,14 +75,7 @@ func RateLimit(limit rate.Limit, burst int, keyFn func(*http.Request) string) fu
 }
 
 func IPKeyFn(r *http.Request) string {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		return forwarded
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
+	return r.Header.Get("X-Real-IP")
 }
 
 func UserKeyFn(r *http.Request) string {
