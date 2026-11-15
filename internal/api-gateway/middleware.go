@@ -1,13 +1,11 @@
 package api_gateway
 
 import (
-	"SaaS_Pipeline/pkg/logger"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/google/uuid"
 )
 
 func jsonError(w http.ResponseWriter, message string, statusCode int) {
@@ -60,16 +58,5 @@ func AuthMiddleware(jwtSecret string, next http.Handler) http.Handler {
 		r.Header.Set("X-User-Id", userIDStr)
 
 		next.ServeHTTP(w, r)
-	})
-}
-
-func RequestIDMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestID := r.Header.Get("X-Request-Id")
-		if requestID == "" {
-			requestID = uuid.New().String()
-		}
-		ctx := logger.ContextWithRequestID(r.Context(), requestID)
-		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

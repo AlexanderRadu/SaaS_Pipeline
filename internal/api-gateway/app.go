@@ -4,7 +4,9 @@ import (
 	"SaaS_Pipeline/pkg/config"
 	"SaaS_Pipeline/pkg/logger"
 	"SaaS_Pipeline/pkg/middlewares/bodylimit"
+	"SaaS_Pipeline/pkg/middlewares/metrics"
 	"SaaS_Pipeline/pkg/middlewares/ratelimit"
+	"SaaS_Pipeline/pkg/middlewares/requestId"
 	"context"
 	"errors"
 	"log/slog"
@@ -12,6 +14,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/time/rate"
 )
 
@@ -34,18 +37,13 @@ func New(ctx context.Context) (*App, error) {
 
 	mux := http.NewServeMux()
 
-	//registerLimiter := ratelimit.RateLimit(rate.Limit(5.0/60.0), 5, 20*time.Minute, 5*time.Minute, ratelimit.IPKeyFn)
-	//loginLimiter := ratelimit.RateLimit(rate.Limit(10.0/60.0), 5, 20*time.Minute, 5*time.Minute, ratelimit.IPKeyFn)
-
 	authProxy, err := createProxy("AuthService", authServiceURL)
 
 	if err != nil {
 		return nil, err
 	}
 
-	mux.Handle("/api/v2/auth/register", authProxy)
-	mux.Handle("/api/v2/auth/login", authProxy)
-	mux.Handle("/api/v2/auth", authProxy)
+	mux.Handle("/api/v2/auth/", authProxy)
 
 	authLimiter := ratelimit.RateLimit(rate.Limit(1000.0/60.0), 50, 20*time.Minute, 5*time.Minute, ratelimit.UserKeyFn)
 
@@ -72,18 +70,25 @@ func New(ctx context.Context) (*App, error) {
 	mux.Handle("/api/v2/instances", secureRoute(statusProxy))
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 
 	})
 
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ready"}`))
 	})
 
+	mux.Handle("GET /metrics", promhttp.Handler())
+
+	handler := metrics.MetricsMiddleware(mux)
+
 	var limit int64 = 1024 * 1024 * 5
-	handler := bodylimit.LimitBody(limit)(RequestIDMiddleware(mux))
+
+	handler = bodylimit.LimitBody(limit)(requestId.RequestIDMiddleware(handler))
 
 	srv := &http.Server{
 		Addr:              ":" + port,

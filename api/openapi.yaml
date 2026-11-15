@@ -29,6 +29,8 @@ paths:
           description: Bad request
         '409':
           description: Conflict
+        '500':
+          description: Server error
 
   /api/v2/auth/login:
     post:
@@ -51,6 +53,36 @@ paths:
                 $ref: '#/components/schemas/TokenResponse'
         '401':
           description: Unauthorized
+        '500':
+          description: Server error
+
+  /api/v2/auth/refresh:
+    post:
+      description: Refresh token update
+      tags: [ Auth ]
+      security: [ ]
+      operationId: updateRefreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized (Invalid or expired refresh token)
+        '500':
+          description: Server error
+
+
 
   /api/v2/catalog:
     get:
@@ -402,8 +434,18 @@ components:
 
     TokenResponse:
       type: object
+      required: [ accessToken, refreshToken ]
       properties:
-        token:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+
+    RefreshTokenRequest:
+      type: object
+      required: [ refreshToken ]
+      properties:
+        refreshToken:
           type: string
 
     InstanceInfo:

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"SaaS_Pipeline/internal/auth"
+	"SaaS_Pipeline/internal/auth/app"
 	"context"
 	"log"
 	"os"
@@ -13,7 +13,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	app, err := auth.New(ctx)
+	app, err := app.New(ctx)
 	if err != nil {
 		log.Fatalf("Failed to initialize app: %v", err)
 	}
