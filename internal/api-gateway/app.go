@@ -4,6 +4,7 @@ import (
 	"SaaS_Pipeline/pkg/config"
 	"SaaS_Pipeline/pkg/logger"
 	"SaaS_Pipeline/pkg/middlewares/bodylimit"
+	"SaaS_Pipeline/pkg/middlewares/logging"
 	"SaaS_Pipeline/pkg/middlewares/metrics"
 	"SaaS_Pipeline/pkg/middlewares/ratelimit"
 	"SaaS_Pipeline/pkg/middlewares/requestId"
@@ -87,8 +88,9 @@ func New(ctx context.Context) (*App, error) {
 	handler := metrics.MetricsMiddleware(mux)
 
 	var limit int64 = 1024 * 1024 * 5
-
-	handler = bodylimit.LimitBody(limit)(requestId.RequestIDMiddleware(handler))
+	handler = logging.LoggingMiddleware(log)(handler)
+	handler = requestId.RequestIDMiddleware(handler)
+	handler = bodylimit.LimitBody(limit)(handler)
 
 	srv := &http.Server{
 		Addr:              ":" + port,

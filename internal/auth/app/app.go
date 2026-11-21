@@ -10,6 +10,7 @@ import (
 	"SaaS_Pipeline/pkg/config"
 	"SaaS_Pipeline/pkg/logger"
 	"SaaS_Pipeline/pkg/middlewares/logging"
+	"SaaS_Pipeline/pkg/middlewares/requestId"
 	pgx "SaaS_Pipeline/pkg/postgres"
 	"context"
 	"errors"
@@ -62,7 +63,7 @@ func New(ctx context.Context) (*App, error) {
 	api.HandlerFromMux(strictHandler, defaultMux)
 
 	mux := logging.LoggingMiddleware(log)(defaultMux)
-	//mux = requestId.RequestIDMiddleware(mux)
+	mux = requestId.InternalRequestIDMiddleware(mux)
 	mux = middleware.XRealIP(mux)
 	srv := &http.Server{
 		Addr:              ":" + port,
